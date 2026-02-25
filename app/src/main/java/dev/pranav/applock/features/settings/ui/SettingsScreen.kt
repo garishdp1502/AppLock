@@ -277,10 +277,9 @@ fun SettingsScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-
-            item {
-                SupportCard()
-            }
+//            item {
+//                SupportCard()
+//            }
             item {
                 SectionTitle(text = stringResource(R.string.settings_screen_lock_screen_customization_title))
                 Card(
@@ -414,9 +413,9 @@ fun SettingsScreen(
                     shizukuPermissionLauncher = shizukuPermissionLauncher
                 )
             }
-            item {
-                LinksSection()
-            }
+//            item {
+//                LinksSection()
+//            }
         }
     }
 }

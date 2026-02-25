@@ -270,67 +270,67 @@ fun MainScreen(
 
     val appLockRepository = context.appLockRepository()
 
-    var showCommunityLink by remember { mutableStateOf(appLockRepository.isShowCommunityLink()) }
-
-    if (showCommunityLink && !showAccessibilityDialog && !showShizukuDialog && !showUsageStatsDialog && !showAntiUninstallAccessibilityDialog && !showAntiUninstallDeviceAdminDialog && !showOverlayDialog) {
-        AlertDialog(
-            onDismissRequest = { appLockRepository.setCommunityLinkShown(true) },
-            title = { Text(stringResource(R.string.main_screen_join_community_dialog_title)) },
-            text = { Text(stringResource(R.string.main_screen_join_community_dialog_text)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    appLockRepository.setCommunityLinkShown(true)
-                    showCommunityLink = false
-                    context.startActivity(
-                        Intent(
-                            Intent.ACTION_VIEW,
-                            "https://discord.gg/46wCMRVAre".toUri() // Keep this as is, not a user-facing string
-                        )
-                    )
-                }) {
-                    Text(stringResource(R.string.main_screen_join_community_join_discord_button))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    appLockRepository.setCommunityLinkShown(true)
-                    showCommunityLink = false
-                }) {
-                    Text(stringResource(R.string.main_screen_join_community_dismiss_button))
-                }
-            }
-        )
-    }
-
-    var showDonateDialog by remember { mutableStateOf(appLockRepository.isShowDonateLink()) }
-    if (showDonateDialog && !showAccessibilityDialog && !showShizukuDialog && !showUsageStatsDialog && !showAntiUninstallAccessibilityDialog && !showAntiUninstallDeviceAdminDialog && !showCommunityLink && !showOverlayDialog) {
-        AlertDialog(
-            onDismissRequest = { showDonateDialog = false },
-            title = { Text(stringResource(R.string.main_screen_support_development_dialog_title)) },
-            text = { Text(stringResource(R.string.support_development_text)) },
-            confirmButton = {
-                FilledTonalButton(
-                    onClick = {
-                        context.startActivity(
-                            Intent(
-                                Intent.ACTION_VIEW,
-                                "https://paypal.me/pranavpurwar".toUri() // Keep this as is, not a user-facing string
-                            )
-                        )
-                        showDonateDialog = false
-                        appLockRepository.setShowDonateLink(false)
-                    }
-                ) { Text(stringResource(R.string.main_screen_support_development_donate_button)) }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    showDonateDialog = false
-                    appLockRepository.setShowDonateLink(false)
-                }) { Text(stringResource(R.string.cancel_button)) }
-            },
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
-        )
-    }
+//    var showCommunityLink by remember { mutableStateOf(appLockRepository.isShowCommunityLink()) }
+//
+//    if (showCommunityLink && !showAccessibilityDialog && !showShizukuDialog && !showUsageStatsDialog && !showAntiUninstallAccessibilityDialog && !showAntiUninstallDeviceAdminDialog && !showOverlayDialog) {
+//        AlertDialog(
+//            onDismissRequest = { appLockRepository.setCommunityLinkShown(true) },
+//            title = { Text(stringResource(R.string.main_screen_join_community_dialog_title)) },
+//            text = { Text(stringResource(R.string.main_screen_join_community_dialog_text)) },
+//            confirmButton = {
+//                TextButton(onClick = {
+//                    appLockRepository.setCommunityLinkShown(true)
+//                    showCommunityLink = false
+//                    context.startActivity(
+//                        Intent(
+//                            Intent.ACTION_VIEW,
+//                            "https://discord.gg/46wCMRVAre".toUri() // Keep this as is, not a user-facing string
+//                        )
+//                    )
+//                }) {
+//                    Text(stringResource(R.string.main_screen_join_community_join_discord_button))
+//                }
+//            },
+//            dismissButton = {
+//                TextButton(onClick = {
+//                    appLockRepository.setCommunityLinkShown(true)
+//                    showCommunityLink = false
+//                }) {
+//                    Text(stringResource(R.string.main_screen_join_community_dismiss_button))
+//                }
+//            }
+//        )
+//    }
+//
+//    var showDonateDialog by remember { mutableStateOf(appLockRepository.isShowDonateLink()) }
+//    if (showDonateDialog && !showAccessibilityDialog && !showShizukuDialog && !showUsageStatsDialog && !showAntiUninstallAccessibilityDialog && !showAntiUninstallDeviceAdminDialog && !showCommunityLink && !showOverlayDialog) {
+//        AlertDialog(
+//            onDismissRequest = { showDonateDialog = false },
+//            title = { Text(stringResource(R.string.main_screen_support_development_dialog_title)) },
+//            text = { Text(stringResource(R.string.support_development_text)) },
+//            confirmButton = {
+//                FilledTonalButton(
+//                    onClick = {
+//                        context.startActivity(
+//                            Intent(
+//                                Intent.ACTION_VIEW,
+//                                "https://paypal.me/pranavpurwar".toUri() // Keep this as is, not a user-facing string
+//                            )
+//                        )
+//                        showDonateDialog = false
+//                        appLockRepository.setShowDonateLink(false)
+//                    }
+//                ) { Text(stringResource(R.string.main_screen_support_development_donate_button)) }
+//            },
+//            dismissButton = {
+//                TextButton(onClick = {
+//                    showDonateDialog = false
+//                    appLockRepository.setShowDonateLink(false)
+//                }) { Text(stringResource(R.string.cancel_button)) }
+//            },
+//            containerColor = MaterialTheme.colorScheme.surfaceContainer
+//        )
+//    }
 
     Scaffold(
         modifier = Modifier
@@ -375,7 +375,7 @@ fun MainScreen(
                     }
                     var expanded by remember { mutableStateOf(false) }
                     IconButton(
-                        onClick = { expanded = !expanded }
+                        onClick = { }
                     ) {
                         Icon(
                             imageVector = Icons.Default.FilterList,

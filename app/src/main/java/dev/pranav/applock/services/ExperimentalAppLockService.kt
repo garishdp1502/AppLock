@@ -112,9 +112,7 @@ class ExperimentalAppLockService : Service() {
             ?.map { it.packageName }
             ?: emptyList()
 
-        return packageName == this.packageName ||
-                packageName in keyboardPackages ||
-                packageName in AppLockConstants.EXCLUDED_APPS
+        return packageName == this.packageName
     }
 
     /**
