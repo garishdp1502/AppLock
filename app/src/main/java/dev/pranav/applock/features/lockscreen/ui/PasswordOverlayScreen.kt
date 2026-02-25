@@ -1,7 +1,7 @@
 package dev.pranav.applock.features.lockscreen.ui
 
 import android.content.Context
-import android.content.Intent
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -20,43 +20,15 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ButtonShapes
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.toShape
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -136,28 +108,32 @@ class PasswordOverlayActivity : FragmentActivity() {
         }
     }
 
-    
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        Log.d(TAG, "Configuration changed - orientation: ${newConfig.orientation}")
+    }
+
     private fun setupWindow() {
         window.addFlags(
             WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
-            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-            WindowManager.LayoutParams.FLAG_ALLOW_LOCK_WHILE_SCREEN_ON or
-            WindowManager.LayoutParams.FLAG_SECURE
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                    WindowManager.LayoutParams.FLAG_ALLOW_LOCK_WHILE_SCREEN_ON or
+                    WindowManager.LayoutParams.FLAG_SECURE
         )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
         }
-        
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             window.setHideOverlayWindows(true)
         }
 
 
         val layoutParams = window.attributes
-        layoutParams.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY 
-        
+        layoutParams.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+
         if (appLockRepository.shouldUseMaxBrightness()) {
             layoutParams.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL
         }
@@ -271,13 +247,8 @@ class PasswordOverlayActivity : FragmentActivity() {
                 isBiometricPromptShowingLocal = false
                 lockedPackageNameFromIntent?.let { pkgName ->
                     AppLockManager.temporarilyUnlockAppWithBiometrics(pkgName)
-                    val intent = packageManager.getLaunchIntentForPackage(pkgName)
-                    if (intent != null) {
-                        intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_NEW_TASK)
-                        startActivity(intent)
-                    } else {
-                        Log.e(TAG, "No launch intent found for package: $pkgName")
-                    }
+                    // Fix: Do NOT relaunch the app. Just finish the overlay to reveal the underlying activity.
+                    // This preserves the navigation stack/state of the locked app.
                 }
                 finishAfterTransition()
             }
@@ -319,9 +290,23 @@ class PasswordOverlayActivity : FragmentActivity() {
 
     override fun onPause() {
         super.onPause()
+        if (!isChangingConfigurations() && !isBiometricPromptShowingLocal && !movedToBackground) {
+            AppLockManager.isLockScreenShown.set(false)
+            AppLockManager.reportBiometricAuthFinished()
+            finish()
+        }
+    }
+
+    override fun onResumeFragments() {
+        super.onResumeFragments()
+        AppLockManager.isLockScreenShown.set(true)
+    }
+
+    override fun onStop() {
+        super.onStop()
         movedToBackground = true
         AppLockManager.isLockScreenShown.set(false)
-        if (!isFinishing && !isDestroyed) {
+        if (!isChangingConfigurations() && !isFinishing && !isDestroyed) {
             AppLockManager.reportBiometricAuthFinished()
             finish()
         }
@@ -354,6 +339,9 @@ fun PasswordOverlayScreen(
     val screenWidth = windowInfo.containerSize.width
     val screenHeight = windowInfo.containerSize.height
     val isLandscape = screenWidth > screenHeight
+
+    val configuration = LocalConfiguration.current
+    val screenHeightDp = configuration.screenHeightDp.dp
 
     Surface(
         modifier = modifier.fillMaxSize(),
@@ -444,7 +432,9 @@ fun PasswordOverlayScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
-                Spacer(modifier = Modifier.height(48.dp))
+                // Dynamic spacer for small screens
+                val topSpacerHeight = if (screenHeightDp < 600.dp) 12.dp else 48.dp
+                Spacer(modifier = Modifier.height(topSpacerHeight))
 
                 Text(
                     text = if (!fromMainActivity && !lockedAppName.isNullOrEmpty())
@@ -689,12 +679,25 @@ fun KeypadSection(
         }
     }
 
+    // Calculate available height for keypad (heuristic)
+    // 4 rows of buttons + 3 spacings + biometric button (optional)
+    // Estimate top content takes ~200dp
+    val estimatedTopContentHeight = 220.dp
+    val availableHeight = screenHeightDp - estimatedTopContentHeight
+
     val buttonSize =
-        remember(screenWidthDp, screenHeightDp, isLandscape, buttonSpacing, horizontalPadding) {
+        remember(
+            screenWidthDp,
+            screenHeightDp,
+            isLandscape,
+            buttonSpacing,
+            horizontalPadding,
+            showBiometricButton
+        ) {
             if (isLandscape) {
-                val availableHeight = screenHeightDp * 0.8f
+                val availableLandscapeHeight = screenHeightDp * 0.8f
                 val totalVerticalSpacing = buttonSpacing * 3
-                val heightBasedSize = (availableHeight - totalVerticalSpacing) / 4f
+                val heightBasedSize = (availableLandscapeHeight - totalVerticalSpacing) / 4f
 
                 val availableWidth = (screenWidthDp * 0.45f)
                 val totalHorizontalSpacing = buttonSpacing * 2
@@ -703,8 +706,18 @@ fun KeypadSection(
                 minOf(heightBasedSize, widthBasedSize)
             } else {
                 val availableWidth = screenWidthDp - (horizontalPadding * 2)
-                val totalSpacing = buttonSpacing * 2
-                (availableWidth - totalSpacing) / 3.5f
+                val totalHorizontalSpacing = buttonSpacing * 2
+                val widthBasedSize = (availableWidth - totalHorizontalSpacing) / 3.5f
+
+                // Height constraint for portrait
+                val totalVerticalSpacing = buttonSpacing * 3
+                // If biometric button is shown, it takes extra space, but it's floating or above?
+                // In the current layout, it's inside the column at the top.
+                val biometricAllowance = if (showBiometricButton) 60.dp else 0.dp
+                val heightBasedSize =
+                    (availableHeight - totalVerticalSpacing - biometricAllowance) / 4f
+
+                minOf(widthBasedSize, heightBasedSize)
             }
         }
 
@@ -756,6 +769,8 @@ fun KeypadSection(
             Modifier
                 .padding(horizontal = horizontalPadding)
                 .navigationBarsPadding()
+                // Add a small bottom padding to ensure it doesn't touch the edge
+                .padding(bottom = 8.dp)
         }
     ) {
         if (showBiometricButton) {

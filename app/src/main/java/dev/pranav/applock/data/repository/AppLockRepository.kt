@@ -11,10 +11,12 @@ class AppLockRepository(private val context: Context) {
 
     private val preferencesRepository = PreferencesRepository(context)
     private val lockedAppsRepository = LockedAppsRepository(context)
-    private val backendServiceManager = BackendServiceManager(context)
+    private val backendServiceManager = BackendServiceManager()
 
     fun getLockedApps(): Set<String> = lockedAppsRepository.getLockedApps()
     fun addLockedApp(packageName: String) = lockedAppsRepository.addLockedApp(packageName)
+    fun addMultipleLockedApps(packageNames: Set<String>) =
+        lockedAppsRepository.addMultipleLockedApps(packageNames)
     fun removeLockedApp(packageName: String) = lockedAppsRepository.removeLockedApp(packageName)
     fun isAppLocked(packageName: String): Boolean = lockedAppsRepository.isAppLocked(packageName)
 
@@ -27,6 +29,16 @@ class AppLockRepository(private val context: Context) {
 
     fun isAppTriggerExcluded(packageName: String): Boolean =
         lockedAppsRepository.isAppTriggerExcluded(packageName)
+
+    fun getAntiUninstallApps(): Set<String> = lockedAppsRepository.getAntiUninstallApps()
+    fun addAntiUninstallApp(packageName: String) =
+        lockedAppsRepository.addAntiUninstallApp(packageName)
+
+    fun removeAntiUninstallApp(packageName: String) =
+        lockedAppsRepository.removeAntiUninstallApp(packageName)
+
+    fun isAppAntiUninstall(packageName: String): Boolean =
+        lockedAppsRepository.isAppAntiUninstall(packageName)
 
     fun getPassword(): String? = preferencesRepository.getPassword()
     fun setPassword(password: String) = preferencesRepository.setPassword(password)
@@ -75,6 +87,9 @@ class AppLockRepository(private val context: Context) {
     fun setCommunityLinkShown(shown: Boolean) = preferencesRepository.setCommunityLinkShown(shown)
     fun isShowDonateLink(): Boolean = preferencesRepository.isShowDonateLink(context)
     fun setShowDonateLink(show: Boolean) = preferencesRepository.setShowDonateLink(context, show)
+
+    fun isLoggingEnabled(): Boolean = preferencesRepository.isLoggingEnabled()
+    fun setLoggingEnabled(enabled: Boolean) = preferencesRepository.setLoggingEnabled(enabled)
 
     fun setActiveBackend(backend: BackendImplementation) =
         backendServiceManager.setActiveBackend(backend)

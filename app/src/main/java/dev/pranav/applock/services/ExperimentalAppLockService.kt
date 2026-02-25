@@ -19,6 +19,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.getSystemService
 import dev.pranav.applock.R
 import dev.pranav.applock.core.broadcast.DeviceAdmin
+import dev.pranav.applock.core.utils.LogUtils
 import dev.pranav.applock.core.utils.appLockRepository
 import dev.pranav.applock.core.utils.hasUsagePermission
 import dev.pranav.applock.data.repository.AppLockRepository
@@ -41,6 +42,20 @@ class ExperimentalAppLockService : Service() {
     private var timer: Timer? = null
     private var previousForegroundPackage = ""
 
+    private val screenStateReceiver = object: android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: Intent?) {
+            if (intent?.action == Intent.ACTION_SCREEN_OFF) {
+                LogUtils.d(
+                    TAG,
+                    "Screen off detected in Usage Stats fallback. Resetting AppLock state."
+                )
+                AppLockManager.isLockScreenShown.set(false)
+                AppLockManager.clearTemporarilyUnlockedApp()
+                previousForegroundPackage = ""
+            }
+        }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (!shouldStartService(appLockRepository, this::class.java) || !hasUsagePermission()) {
             Log.e(TAG, "Permissions missing or service not needed. Falling back.")
@@ -49,11 +64,16 @@ class ExperimentalAppLockService : Service() {
             return START_NOT_STICKY
         }
 
-        Log.d(TAG, "Service starting.")
         AppLockManager.resetRestartAttempts(TAG)
         appLockRepository.setActiveBackend(BackendImplementation.USAGE_STATS)
         AppLockManager.stopAllOtherServices(this, this::class.java)
         AppLockManager.isLockScreenShown.set(false)
+
+        val filter = android.content.IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_USER_PRESENT)
+        }
+        registerReceiver(screenStateReceiver, filter)
 
         startMonitoringTimer()
         startForegroundService()
@@ -63,10 +83,16 @@ class ExperimentalAppLockService : Service() {
 
     override fun onDestroy() {
         timer?.cancel()
-        Log.d(TAG, "Service destroyed. Checking for fallback.")
+        LogUtils.d(TAG, "Service destroyed. Checking for fallback.")
 
         if (shouldStartService(appLockRepository, this::class.java)) {
             AppLockManager.startFallbackServices(this, this::class.java)
+        }
+
+        try {
+            unregisterReceiver(screenStateReceiver)
+        } catch (e: IllegalArgumentException) {
+            Log.w(TAG, "Receiver not registered or already unregistered")
         }
 
         AppLockManager.isLockScreenShown.set(false)
@@ -85,6 +111,7 @@ class ExperimentalAppLockService : Service() {
             if (!appLockRepository.isProtectEnabled() || applicationContext.isDeviceLocked()) {
                 if (applicationContext.isDeviceLocked()) {
                     AppLockManager.appUnlockTimes.clear()
+                    previousForegroundPackage = ""
                 }
                 return@timerTask
             }
@@ -130,9 +157,7 @@ class ExperimentalAppLockService : Service() {
             if (event.eventType != UsageEvents.Event.ACTIVITY_RESUMED) continue
             if (event.className == "dev.pranav.applock.features.lockscreen.ui.PasswordOverlayActivity") continue
 
-            if (event.className in AppLockConstants.KNOWN_RECENTS_CLASSES ||
-                event.className in AppLockConstants.ADMIN_CONFIG_CLASSES ||
-                event.className in AppLockConstants.ACCESSIBILITY_SETTINGS_CLASSES
+            if (event.className in AppLockConstants.KNOWN_RECENTS_CLASSES
             ) {
                 continue
             }
@@ -149,7 +174,7 @@ class ExperimentalAppLockService : Service() {
         val unlockDurationMinutes = appLockRepository.getUnlockTimeDuration()
         val unlockTimestamp = AppLockManager.appUnlockTimes[packageName] ?: 0L
 
-        Log.d(
+        LogUtils.d(
             TAG,
             "checkAndLockApp: pkg=$packageName, duration=$unlockDurationMinutes min, unlockTime=$unlockTimestamp, currentTime=$currentTime, isLockScreenShown=${AppLockManager.isLockScreenShown.get()}"
         )
@@ -163,7 +188,7 @@ class ExperimentalAppLockService : Service() {
 
             val elapsedMillis = currentTime - unlockTimestamp
 
-            Log.d(
+            LogUtils.d(
                 TAG,
                 "Grace period check: elapsed=${elapsedMillis}ms (${elapsedMillis / 1000}s), duration=${durationMillis}ms (${durationMillis / 1000}s)"
             )
@@ -172,16 +197,16 @@ class ExperimentalAppLockService : Service() {
                 return
             }
 
-            Log.d(TAG, "Unlock grace period expired for $packageName. Clearing timestamp.")
+            LogUtils.d(TAG, "Unlock grace period expired for $packageName. Clearing timestamp.")
             AppLockManager.appUnlockTimes.remove(packageName)
         }
 
         if (AppLockManager.isLockScreenShown.get() || AppLockManager.currentBiometricState.toString() == biometricAuthStarted) {
-            Log.d(TAG, "Lock screen already shown or biometric auth in progress, skipping")
+            LogUtils.d(TAG, "Lock screen already shown or biometric auth in progress, skipping")
             return
         }
 
-        Log.d(TAG, "Locked app: $packageName. Showing overlay.")
+        LogUtils.d(TAG, "Locked app: $packageName. Showing overlay.")
         AppLockManager.isLockScreenShown.set(true)
 
         val intent = Intent(this, PasswordOverlayActivity::class.java).apply {

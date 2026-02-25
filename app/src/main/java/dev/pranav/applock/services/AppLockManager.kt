@@ -8,7 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.widget.Toast
-import dev.pranav.applock.core.utils.isAccessibilityServiceEnabled
+import dev.pranav.applock.core.utils.LogUtils
 import dev.pranav.applock.data.repository.BackendImplementation
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -26,13 +26,10 @@ object AppLockConstants {
         "com.android.intentresolver",
         "com.google.android.permissioncontroller",
         "android.uid.system:1000",
-        "com.google.android.googlequicksearchbox"
-    )
-
-    val ADMIN_CONFIG_CLASSES = setOf(
-        "com.android.settings.deviceadmin.DeviceAdminAdd",
-        "com.android.settings.applications.specialaccess.deviceadmin.DeviceAdminAdd",
-        "com.android.settings.deviceadmin.DeviceAdminSettings",
+        "com.google.android.googlequicksearchbox",
+        "android",
+        "com.google.android.gms",
+        "com.google.android.webview"
     )
 
     val ACCESSIBILITY_SETTINGS_CLASSES = setOf(
@@ -67,6 +64,36 @@ object AppLockManager {
     val isLockScreenShown = AtomicBoolean(false)
     var currentBiometricState: Any? = null
 
+    // Grace period tracking
+    private var recentlyLeftApp: String = ""
+    private var recentlyLeftTime: Long = 0L
+    private const val GRACE_PERIOD_MS = 300L
+
+    fun setRecentlyLeftApp(packageName: String) {
+        recentlyLeftApp = packageName
+        recentlyLeftTime = System.currentTimeMillis()
+        LogUtils.d(TAG, "Left app $packageName at $recentlyLeftTime")
+    }
+
+    fun checkAndRestoreRecentlyLeftApp(packageName: String): Boolean {
+        // If we are returning to the same app we just left within the grace period
+        if (packageName == recentlyLeftApp && packageName.isNotEmpty()) {
+            val elapsed = System.currentTimeMillis() - recentlyLeftTime
+            if (elapsed <= GRACE_PERIOD_MS) {
+                LogUtils.d(TAG, "Restoring unlock state for $packageName (elapsed: ${elapsed}ms)")
+                temporarilyUnlockedApp = packageName
+                // Clear the tracking so it doesn't trigger again inappropriately
+                recentlyLeftApp = ""
+                recentlyLeftTime = 0L
+                return true
+            } else {
+                LogUtils.d(TAG, "Grace period expired for $packageName (elapsed: ${elapsed}ms)")
+                recentlyLeftApp = "" // Expired
+            }
+        }
+        return false
+    }
+
     private val serviceRestartAttempts = ConcurrentHashMap<String, Int>()
     private val lastRestartTime = ConcurrentHashMap<String, Long>()
 
@@ -78,7 +105,7 @@ object AppLockManager {
     fun unlockApp(packageName: String) {
         temporarilyUnlockedApp = packageName
         appUnlockTimes[packageName] = System.currentTimeMillis()
-        Log.d(
+        LogUtils.d(
             TAG,
             "App $packageName unlocked at timestamp: ${appUnlockTimes[packageName]}, current time: ${System.currentTimeMillis()}"
         )
@@ -114,11 +141,10 @@ object AppLockManager {
         when (targetBackend) {
             BackendImplementation.ACCESSIBILITY -> {
                 if (AppLockAccessibilityService.isServiceRunning) return
-                if (!context.isAccessibilityServiceEnabled()) {
-                    showNoPermissionsToast(context)
-                    return
-                }
-                Log.d(TAG, "Attempting ACCESSIBILITY backend. Requires manual setup.")
+                Log.d(
+                    TAG,
+                    "Attempting ACCESSIBILITY backend restart. (Manually enabled in settings)"
+                )
             }
 
             BackendImplementation.USAGE_STATS, BackendImplementation.SHIZUKU -> {
@@ -126,6 +152,13 @@ object AppLockManager {
             }
 
             null -> {
+                if (failedService == AppLockAccessibilityService::class.java) {
+                    LogUtils.d(
+                        TAG,
+                        "Accessibility Service stopped. Waiting for system restart or manual re-enable."
+                    )
+                    return
+                }
                 showNoPermissionsToast(context)
                 return
             }
@@ -139,13 +172,13 @@ object AppLockManager {
             .forEach {
                 context.stopService(Intent(context, it))
             }
-        Log.d(TAG, "Stopped all main app lock services except ${excludeService.simpleName}.")
+        LogUtils.d(TAG, "Stopped all main app lock services except ${excludeService.simpleName}.")
     }
 
     fun resetRestartAttempts(serviceName: String) {
         serviceRestartAttempts.remove(serviceName)
         lastRestartTime.remove(serviceName)
-        Log.d(TAG, "Reset restart attempts for $serviceName")
+        LogUtils.d(TAG, "Reset restart attempts for $serviceName")
     }
 
     private fun showNoPermissionsToast(context: Context) {
@@ -201,7 +234,7 @@ object AppLockManager {
                 else -> return
             }
 
-            Log.d(TAG, "Starting $backend service as fallback.")
+            LogUtils.d(TAG, "Starting $backend service as fallback.")
             context.startService(Intent(context, serviceClass))
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start fallback service for backend: $backend", e)
