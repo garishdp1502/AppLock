@@ -131,7 +131,7 @@ class PreferencesRepository(context: Context) {
     }
 
     fun isShowCommunityLink(): Boolean {
-        return !settingsPrefs.getBoolean(KEY_COMMUNITY_LINK_SHOWN, false)
+        return !settingsPrefs.getBoolean(KEY_COMMUNITY_LINK_SHOWN, true)
     }
 
     fun setCommunityLinkShown(shown: Boolean) {
