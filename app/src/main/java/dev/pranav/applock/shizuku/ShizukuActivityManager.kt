@@ -1,9 +1,8 @@
 package dev.pranav.applock.shizuku
 
 import android.app.ActivityManager
-import android.app.ActivityManagerNative
-import android.app.IActivityManager
 import android.app.IActivityTaskManager
+import android.app.TaskInfo
 import android.content.*
 import android.content.Context.RECEIVER_EXPORTED
 import android.content.pm.PackageManager
@@ -19,6 +18,7 @@ import dev.pranav.applock.data.repository.AppLockRepository
 import dev.pranav.applock.data.repository.BackendImplementation
 import dev.pranav.applock.services.AppLockManager
 import dev.pranav.applock.services.isDeviceLocked
+import org.lsposed.hiddenapibypass.HiddenApiBypass
 import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuBinderWrapper
 import rikka.shizuku.SystemServiceHelper
@@ -36,9 +36,15 @@ class ShizukuActivityManager(
     private val handler = Handler(Looper.getMainLooper())
     private val checkForegroundRunnable = object : Runnable {
         override fun run() {
-            checkForegroundApp()
-            // Schedule itself again after 500ms
-            handler.postDelayed(this, 500)
+            try {
+                checkForegroundApp()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                LogUtils.e(TAG, "Unhandled exception in foreground monitor", e)
+            } finally {
+                // Schedule itself again after 500ms regardless of failure
+                handler.postDelayed(this, 500)
+            }
         }
     }
 
@@ -48,7 +54,8 @@ class ShizukuActivityManager(
                 Intent.ACTION_CLOSE_SYSTEM_DIALOGS -> {
                     val reason = intent.getStringExtra("reason")
                     LogUtils.d(TAG, "System dialog closed, reason: $reason")
-                    if (lastForegroundApp == topActivity?.packageName && topActivity?.className == "com.android.launcher3.uioverrides.QuickstepLauncher") {
+                    val currentTop = topActivity
+                    if (currentTop != null && lastForegroundApp == currentTop.packageName && currentTop.className == "com.android.launcher3.uioverrides.QuickstepLauncher") {
                         AppLockManager.clearTemporarilyUnlockedApp()
                     }
 
@@ -92,14 +99,6 @@ class ShizukuActivityManager(
             addAction(Intent.ACTION_USER_PRESENT)
         }
 
-        SystemServiceHelper.getSystemService("activity").let {
-            if (Build.VERSION.SDK_INT >= 26) {
-                IActivityManager.Stub.asInterface(it)
-            } else {
-                ActivityManagerNative.asInterface(it)
-            }
-        }
-
         context.registerReceiver(homeButtonReceiver, homeFilter, RECEIVER_EXPORTED)
 
         // Keep the device unlock receiver for compatibility
@@ -130,42 +129,55 @@ class ShizukuActivityManager(
             handler.removeCallbacks(checkForegroundRunnable)
             return
         }
-        if (context.isDeviceLocked()) return
 
-        val activity = topActivity ?: return
-        val packageName = activity.packageName
-        val className = activity.className
-
-        // Skip our own app and known recents classes
-        if (packageName == context.packageName) return
-
-        // Skip if app is temporarily unlocked
-        if (packageName == lastForegroundApp && AppLockManager.isAppTemporarilyUnlocked(packageName)) return
-
-        // If we should lock apps on return (home button pressed, device locked, etc.)
-        // then trigger app lock for any new foreground app
-        if (shouldLockAppsOnReturn && packageName != lastForegroundApp) {
-            LogUtils.d(TAG, "Should lock apps on return - triggering for: $packageName")
-            shouldLockAppsOnReturn = false // Reset the flag
-
-            val timeMillis = System.currentTimeMillis()
-            lastForegroundApp = packageName
-            onForegroundAppChanged(packageName, className, timeMillis)
+        if (!Shizuku.pingBinder()) {
+            LogUtils.e(TAG, "Shizuku binder lost during foreground monitoring")
             return
         }
 
-        // Normal app switching - only trigger if current app has changed
-        if (packageName != lastForegroundApp) {
-            val triggerExclusions = appLockRepository.getTriggerExcludedApps()
+        if (context.isDeviceLocked()) return
 
-            // Check if previous app was in trigger exclusions
-            if (lastForegroundApp in triggerExclusions) {
-                LogUtils.d(
-                    TAG,
-                    "Previous app $lastForegroundApp is excluded, skipping app lock for $packageName"
+        getTasksWrapper().filterVisible().forEach {
+            Log.d(it.topActivity!!.packageName, it.toString())
+
+            val activity = it.topActivity!!
+            val packageName = activity.packageName
+            val className = activity.className
+
+            // Skip our own app and known recents classes
+            if (packageName == context.packageName) return
+
+            // Skip if app is temporarily unlocked
+            if (packageName == lastForegroundApp && AppLockManager.isAppTemporarilyUnlocked(
+                    packageName
                 )
+            ) return
+
+            // If we should lock apps on return (home button pressed, device locked, etc.)
+            // then trigger app lock for any new foreground app
+            if (shouldLockAppsOnReturn && packageName != lastForegroundApp) {
+                LogUtils.d(TAG, "Should lock apps on return - triggering for: $packageName")
+                shouldLockAppsOnReturn = false // Reset the flag
+
+                val timeMillis = System.currentTimeMillis()
                 lastForegroundApp = packageName
+                onForegroundAppChanged(packageName, className, timeMillis)
                 return
+            }
+
+            // Normal app switching - only trigger if current app has changed
+            if (packageName != lastForegroundApp) {
+                val triggerExclusions = appLockRepository.getTriggerExcludedApps()
+
+                // Check if previous app was in trigger exclusions
+                if (lastForegroundApp in triggerExclusions) {
+                    LogUtils.d(
+                        TAG,
+                        "Previous app $lastForegroundApp is excluded, skipping app lock for $packageName"
+                    )
+                    lastForegroundApp = packageName
+                    return
+                }
             }
 
             val timeMillis = System.currentTimeMillis()
@@ -202,7 +214,7 @@ class ShizukuActivityManager(
 }
 
 val topActivity: ComponentName?
-    get() = getTasksWrapper().first().topActivity
+    get() = getTasksWrapper().firstOrNull()?.topActivity
 
 private val activityTaskManager: IActivityTaskManager =
     SystemServiceHelper.getSystemService("activity_task")
@@ -210,7 +222,36 @@ private val activityTaskManager: IActivityTaskManager =
         .let(IActivityTaskManager.Stub::asInterface)
 
 private fun getTasksWrapper(): List<ActivityManager.RunningTaskInfo> = when {
-    Build.VERSION.SDK_INT < 31 -> activityTaskManager.getTasks(1)
-    else -> runCatching { activityTaskManager.getTasks(1, false, false, Display.INVALID_DISPLAY) }
-        .getOrElse { activityTaskManager.getTasks(1, false, false) }
+    Build.VERSION.SDK_INT < 31 -> runCatching { activityTaskManager.getTasks(8) }.getOrNull()
+        .orEmpty()
+
+    else -> runCatching { activityTaskManager.getTasks(8, false, false, Display.INVALID_DISPLAY) }
+        .getOrNull()
+        .orEmpty()
+}
+
+private fun List<ActivityManager.RunningTaskInfo>.filterVisible(): List<ActivityManager.RunningTaskInfo> {
+    return filter {
+        it.isRunning && it.isVisible
+    }
+}
+
+fun TaskInfo.isFreeform(): Boolean {
+    try {
+        return HiddenApiBypass.invoke(TaskInfo::class.java, this, "isFreeform") as Boolean
+    } catch (e: Throwable) {
+        e.printStackTrace()
+        return false
+    }
+}
+
+fun TaskInfo.isFocused(): Boolean {
+    try {
+        return HiddenApiBypass.getInstanceFields(TaskInfo::class.java)
+            .firstOrNull { it.name == "isFocused" }!!
+            .getBoolean(this)
+    } catch (e: Throwable) {
+        e.printStackTrace()
+        return false
+    }
 }

@@ -6,13 +6,19 @@ import android.net.Uri
 import android.os.Build
 import android.util.Log
 import androidx.core.content.FileProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.io.File
 import java.time.Instant
 import java.time.temporal.ChronoUnit
-import kotlin.concurrent.thread
 
 @SuppressLint("StaticFieldLeak")
 object LogUtils {
+    private val logScope: CoroutineScope by lazy {
+        CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    }
     private const val TAG = "LogUtils"
     private const val FILE_NAME = "app_logs.txt"
     private const val SECURITY_LOGS = "audit_log.txt"
@@ -30,15 +36,31 @@ object LogUtils {
     fun d(tag: String, message: String) {
         if (!loggingEnabled) return
 
-        val file = File(context.filesDir, SECURITY_LOGS)
-
-        if (!file.exists()) {
-            file.createNewFile()
-        }
-
-        file.appendText(Instant.now().toString() + " D " + tag + ": " + message + "\n")
-
+        val line = "${Instant.now()} D $tag: $message\n"
         Log.d(tag, message)
+        writeAuditLogLine(line)
+    }
+
+    fun e(tag: String, message: String, e: Throwable? = null) {
+        if (!loggingEnabled) return
+
+        val line = "${Instant.now()} E $tag: $message\n${Log.getStackTraceString(e)}\n"
+        Log.e(tag, message)
+        writeAuditLogLine(line)
+    }
+
+    private fun writeAuditLogLine(line: String) {
+        logScope.launch {
+            try {
+                val file = File(context.filesDir, SECURITY_LOGS)
+                if (!file.exists()) {
+                    file.createNewFile()
+                }
+                file.appendText(line)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error writing audit log", e)
+            }
+        }
     }
 
     fun exportAuditLogs(): Uri? {
@@ -93,20 +115,22 @@ object LogUtils {
      * Called when the app is updated.
      */
     fun clearAllLogs() {
-        try {
-            val securityLogFile = File(context.filesDir, SECURITY_LOGS)
-            if (securityLogFile.exists()) {
-                securityLogFile.delete()
-                Log.d(TAG, "Cleared security logs")
+        logScope.launch {
+            try {
+                val securityLogFile = File(context.filesDir, SECURITY_LOGS)
+                if (securityLogFile.exists()) {
+                    securityLogFile.delete()
+                    Log.d(TAG, "Cleared security logs")
+                }
+
+                val appLogFile = File(context.cacheDir, FILE_NAME)
+                if (appLogFile.exists()) {
+                    appLogFile.delete()
+                    Log.d(TAG, "Cleared app logs")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error clearing logs", e)
             }
-            
-            val appLogFile = File(context.cacheDir, FILE_NAME)
-            if (appLogFile.exists()) {
-                appLogFile.delete()
-                Log.d(TAG, "Cleared app logs")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error clearing logs", e)
         }
     }
 
@@ -116,7 +140,7 @@ object LogUtils {
      * Runs asynchronously to avoid blocking the main thread.
      */
     fun purgeOldLogs() {
-        thread(name = "LogPurgeThread", isDaemon = true) {
+        logScope.launch {
             purgeOldLogsFromFile(File(context.filesDir, SECURITY_LOGS), "audit")
             purgeOldLogsFromFile(File(context.cacheDir, FILE_NAME), "app")
         }

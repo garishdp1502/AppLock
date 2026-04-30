@@ -24,7 +24,7 @@ class BackendServiceManager {
         chosenBackend: BackendImplementation
     ): Boolean {
         Log.d(TAG, "Checking if service ${serviceClass.simpleName} should start")
-        Log.d(TAG, "Active backend: ${activeBackend?.name}, Chosen backend: ${chosenBackend.name}")
+        Log.d(TAG, "Chosen backend: ${chosenBackend.name}")
 
         val serviceBackend = getBackendForService(serviceClass)
         if (serviceBackend == null) {
@@ -32,15 +32,8 @@ class BackendServiceManager {
             return false
         }
 
-        // Service should start if it matches the chosen backend
         if (serviceBackend == chosenBackend) {
             Log.d(TAG, "Service ${serviceClass.simpleName} matches chosen backend")
-            return true
-        }
-
-        // Service should start if it matches the active backend (fallback scenario)
-        if (activeBackend != null && serviceBackend == activeBackend) {
-            Log.d(TAG, "Service ${serviceClass.simpleName} matches active backend")
             return true
         }
 

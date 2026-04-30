@@ -16,6 +16,7 @@ import android.util.Log
 import android.view.inputmethod.InputMethodManager
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import dev.pranav.applock.R
 import dev.pranav.applock.core.broadcast.DeviceAdmin
@@ -33,6 +34,11 @@ class ExperimentalAppLockService : Service() {
     private val TAG = "ExperimentalAppLockService"
     private val NOTIFICATION_ID = 113
     private val CHANNEL_ID = "ExperimentalAppLockServiceChannel"
+
+    companion object {
+        @Volatile
+        var isServiceRunning = false
+    }
 
     private val appLockRepository: AppLockRepository by lazy { applicationContext.appLockRepository() }
     private val usageStatsManager: UsageStatsManager by lazy { getSystemService()!! }
@@ -58,13 +64,12 @@ class ExperimentalAppLockService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (!shouldStartService(appLockRepository, this::class.java) || !hasUsagePermission()) {
-            Log.e(TAG, "Permissions missing or service not needed. Falling back.")
-            AppLockManager.startFallbackServices(this, this::class.java)
+            Log.e(TAG, "Permissions missing or service not needed. Stopping service.")
             stopSelf()
             return START_NOT_STICKY
         }
 
-        AppLockManager.resetRestartAttempts(TAG)
+        isServiceRunning = true
         appLockRepository.setActiveBackend(BackendImplementation.USAGE_STATS)
         AppLockManager.stopAllOtherServices(this, this::class.java)
         AppLockManager.isLockScreenShown.set(false)
@@ -82,12 +87,9 @@ class ExperimentalAppLockService : Service() {
     }
 
     override fun onDestroy() {
+        isServiceRunning = false
         timer?.cancel()
-        LogUtils.d(TAG, "Service destroyed. Checking for fallback.")
-
-        if (shouldStartService(appLockRepository, this::class.java)) {
-            AppLockManager.startFallbackServices(this, this::class.java)
-        }
+        LogUtils.d(TAG, "Service destroyed")
 
         try {
             unregisterReceiver(screenStateReceiver)
@@ -100,37 +102,62 @@ class ExperimentalAppLockService : Service() {
         super.onDestroy()
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        if (shouldStartService(appLockRepository, this::class.java)) {
+            try {
+                val startIntent = Intent(this, ExperimentalAppLockService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    ContextCompat.startForegroundService(this, startIntent)
+                } else {
+                    startService(startIntent)
+                }
+                Log.d(TAG, "Re-started ExperimentalAppLockService after task removal")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to restart service after task removal", e)
+            }
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     // --- Monitoring ---
 
     private fun startMonitoringTimer() {
         timer?.cancel()
-        timer = Timer()
+        timer = Timer("AppLockUsageStatsMonitor", true)
         timer?.schedule(timerTask {
+            safeMonitorForegroundApp()
+        }, 0, 250)
+    }
+
+    private fun safeMonitorForegroundApp() {
+        try {
             if (!appLockRepository.isProtectEnabled() || applicationContext.isDeviceLocked()) {
                 if (applicationContext.isDeviceLocked()) {
                     AppLockManager.appUnlockTimes.clear()
                     previousForegroundPackage = ""
                 }
-                return@timerTask
+                return
             }
 
-            val foregroundApp = getCurrentForegroundAppPackage() ?: return@timerTask
+            val foregroundApp = getCurrentForegroundAppPackage() ?: return
             val currentPackage = foregroundApp.first
             val triggeringPackage = previousForegroundPackage
             previousForegroundPackage = currentPackage
 
-            if (isExclusionApp(currentPackage)) return@timerTask
+            if (isExclusionApp(currentPackage)) return
 
             if (triggeringPackage in appLockRepository.getTriggerExcludedApps()) {
-                return@timerTask
+                return
             }
 
-            if (currentPackage == triggeringPackage) return@timerTask
+            if (currentPackage == triggeringPackage) return
 
             checkAndLockApp(currentPackage, triggeringPackage, System.currentTimeMillis())
-        }, 0, 250)
+        } catch (e: Exception) {
+            Log.e(TAG, "Unexpected error in Usage Stats monitoring task", e)
+        }
     }
 
     private fun isExclusionApp(packageName: String): Boolean {

@@ -2,6 +2,7 @@ package dev.pranav.applock.data.repository
 
 import android.content.Context
 import dev.pranav.applock.data.manager.BackendServiceManager
+import dev.pranav.applock.services.AppLockManager
 
 /**
  * Main repository that coordinates between different specialized repositories and managers.
@@ -14,9 +15,15 @@ class AppLockRepository(private val context: Context) {
     private val backendServiceManager = BackendServiceManager()
 
     fun getLockedApps(): Set<String> = lockedAppsRepository.getLockedApps()
-    fun addLockedApp(packageName: String) = lockedAppsRepository.addLockedApp(packageName)
-    fun addMultipleLockedApps(packageNames: Set<String>) =
+    fun addLockedApp(packageName: String) {
+        lockedAppsRepository.addLockedApp(packageName)
+        AppLockManager.clearAppUnlockState(packageName)
+    }
+
+    fun addMultipleLockedApps(packageNames: Set<String>) {
         lockedAppsRepository.addMultipleLockedApps(packageNames)
+        packageNames.forEach(AppLockManager::clearAppUnlockState)
+    }
     fun removeLockedApp(packageName: String) = lockedAppsRepository.removeLockedApp(packageName)
     fun isAppLocked(packageName: String): Boolean = lockedAppsRepository.isAppLocked(packageName)
 

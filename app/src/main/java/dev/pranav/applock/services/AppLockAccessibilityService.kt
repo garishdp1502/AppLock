@@ -94,7 +94,6 @@ class AppLockAccessibilityService : AccessibilityService() {
             }
 
             Log.d(TAG, "Accessibility service connected")
-            AppLockManager.resetRestartAttempts(TAG)
             appLockRepository.setActiveBackend(BackendImplementation.ACCESSIBILITY)
         } catch (e: Exception) {
             logError("Error in onServiceConnected", e)
@@ -270,16 +269,7 @@ class AppLockAccessibilityService : AccessibilityService() {
     }
 
     private fun shouldAccessibilityHandleLocking(): Boolean {
-        return when (appLockRepository.getBackendImplementation()) {
-            BackendImplementation.ACCESSIBILITY -> true
-            BackendImplementation.SHIZUKU -> !applicationContext.isServiceRunning(
-                ShizukuAppLockService::class.java
-            )
-
-            BackendImplementation.USAGE_STATS -> !applicationContext.isServiceRunning(
-                ExperimentalAppLockService::class.java
-            )
-        }
+        return appLockRepository.getBackendImplementation() == BackendImplementation.ACCESSIBILITY
     }
 
     private fun checkAndLockApp(packageName: String, triggeringPackage: String, currentTime: Long) {
@@ -545,7 +535,6 @@ class AppLockAccessibilityService : AccessibilityService() {
         return try {
             Log.d(TAG, "Accessibility service unbound")
             isServiceRunning = false
-            AppLockManager.startFallbackServices(this, AppLockAccessibilityService::class.java)
 
             if (Shizuku.pingBinder() && appLockRepository.isAntiUninstallEnabled()) {
                 enableAccessibilityServiceWithShizuku(ComponentName(packageName, javaClass.name))
@@ -572,7 +561,6 @@ class AppLockAccessibilityService : AccessibilityService() {
             }
 
             AppLockManager.isLockScreenShown.set(false)
-            AppLockManager.startFallbackServices(this, AppLockAccessibilityService::class.java)
         } catch (e: Exception) {
             logError("Error in onDestroy", e)
         }

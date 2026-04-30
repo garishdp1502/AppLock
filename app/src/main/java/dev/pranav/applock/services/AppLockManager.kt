@@ -4,12 +4,7 @@ import android.app.ActivityManager
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
-import android.os.Handler
-import android.os.Looper
-import android.util.Log
-import android.widget.Toast
 import dev.pranav.applock.core.utils.LogUtils
-import dev.pranav.applock.data.repository.BackendImplementation
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -39,9 +34,6 @@ object AppLockConstants {
         "com.android.settings.Settings\$AccessibilitySettingsActivity"
     )
 
-    const val MAX_RESTART_ATTEMPTS = 3
-    const val RESTART_COOLDOWN_MS = 30000L
-    const val RESTART_INTERVAL_MS = 5000L
 }
 
 fun Context.isDeviceLocked(): Boolean {
@@ -94,9 +86,6 @@ object AppLockManager {
         return false
     }
 
-    private val serviceRestartAttempts = ConcurrentHashMap<String, Int>()
-    private val lastRestartTime = ConcurrentHashMap<String, Long>()
-
     private val ALL_APP_LOCK_SERVICES = setOf(
         ShizukuAppLockService::class.java,
         ExperimentalAppLockService::class.java
@@ -126,44 +115,16 @@ object AppLockManager {
         temporarilyUnlockedApp = ""
     }
 
-    fun startFallbackServices(context: Context, failedService: Class<*>) {
-        val serviceName = failedService.simpleName
-
-        if (!shouldAttemptRestart(serviceName)) return
-
-        val targetBackend = when (failedService) {
-            ShizukuAppLockService::class.java -> BackendImplementation.USAGE_STATS
-            ExperimentalAppLockService::class.java -> BackendImplementation.ACCESSIBILITY
-            AppLockAccessibilityService::class.java -> null
-            else -> null
+    fun clearAppUnlockState(packageName: String) {
+        if (temporarilyUnlockedApp == packageName) {
+            temporarilyUnlockedApp = ""
         }
-
-        when (targetBackend) {
-            BackendImplementation.ACCESSIBILITY -> {
-                if (AppLockAccessibilityService.isServiceRunning) return
-                Log.d(
-                    TAG,
-                    "Attempting ACCESSIBILITY backend restart. (Manually enabled in settings)"
-                )
-            }
-
-            BackendImplementation.USAGE_STATS, BackendImplementation.SHIZUKU -> {
-                startServiceByBackend(context, targetBackend)
-            }
-
-            null -> {
-                if (failedService == AppLockAccessibilityService::class.java) {
-                    LogUtils.d(
-                        TAG,
-                        "Accessibility Service stopped. Waiting for system restart or manual re-enable."
-                    )
-                    return
-                }
-                showNoPermissionsToast(context)
-                return
-            }
+        appUnlockTimes.remove(packageName)
+        if (packageName == recentlyLeftApp) {
+            recentlyLeftApp = ""
+            recentlyLeftTime = 0L
         }
-        recordRestartAttempt(serviceName)
+        LogUtils.d(TAG, "Cleared stale unlock state for $packageName")
     }
 
     fun stopAllOtherServices(context: Context, excludeService: Class<*>) {
@@ -175,69 +136,4 @@ object AppLockManager {
         LogUtils.d(TAG, "Stopped all main app lock services except ${excludeService.simpleName}.")
     }
 
-    fun resetRestartAttempts(serviceName: String) {
-        serviceRestartAttempts.remove(serviceName)
-        lastRestartTime.remove(serviceName)
-        LogUtils.d(TAG, "Reset restart attempts for $serviceName")
-    }
-
-    private fun showNoPermissionsToast(context: Context) {
-        Handler(Looper.getMainLooper()).post {
-            Toast.makeText(
-                context,
-                "Selected backend has insufficient permissions. Please provide necessary permissions.",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-    }
-
-    private fun shouldAttemptRestart(serviceName: String): Boolean {
-        val currentTime = System.currentTimeMillis()
-        val attempts = serviceRestartAttempts[serviceName] ?: 0
-        val lastRestart = lastRestartTime[serviceName] ?: 0L
-
-        if (currentTime - lastRestart < AppLockConstants.RESTART_INTERVAL_MS) {
-            Log.d(TAG, "Service $serviceName restart too recent, skipping")
-            return false
-        }
-
-        if (attempts >= AppLockConstants.MAX_RESTART_ATTEMPTS) {
-            if (currentTime - lastRestart > AppLockConstants.RESTART_COOLDOWN_MS) {
-                Log.d(TAG, "Cooldown expired for $serviceName, resetting attempts")
-                serviceRestartAttempts[serviceName] = 0
-                return true
-            }
-            Log.d(TAG, "Max restart attempts reached for $serviceName, in cooldown")
-            return false
-        }
-
-        return true
-    }
-
-    private fun recordRestartAttempt(serviceName: String) {
-        val currentTime = System.currentTimeMillis()
-        serviceRestartAttempts.compute(serviceName) { _, attempts -> (attempts ?: 0) + 1 }
-        lastRestartTime[serviceName] = currentTime
-        Log.d(
-            TAG,
-            "Recorded restart attempt ${serviceRestartAttempts[serviceName]} for $serviceName"
-        )
-    }
-
-    private fun startServiceByBackend(context: Context, backend: BackendImplementation) {
-        try {
-            stopAllOtherServices(context, Nothing::class.java)
-
-            val serviceClass = when (backend) {
-                BackendImplementation.SHIZUKU -> ShizukuAppLockService::class.java
-                BackendImplementation.USAGE_STATS -> ExperimentalAppLockService::class.java
-                else -> return
-            }
-
-            LogUtils.d(TAG, "Starting $backend service as fallback.")
-            context.startService(Intent(context, serviceClass))
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start fallback service for backend: $backend", e)
-        }
-    }
 }

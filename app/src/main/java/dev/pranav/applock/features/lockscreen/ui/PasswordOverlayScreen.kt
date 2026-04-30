@@ -6,7 +6,6 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
-import androidx.activity.addCallback
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -67,7 +66,6 @@ class PasswordOverlayActivity : FragmentActivity() {
     internal var triggeringPackageNameFromIntent: String? = null
 
     private var isBiometricPromptShowingLocal = false
-    private var movedToBackground = false
     private var appName: String = ""
 
     private val TAG = "PasswordOverlayActivity"
@@ -87,9 +85,14 @@ class PasswordOverlayActivity : FragmentActivity() {
 
         appLockRepository = AppLockRepository(applicationContext)
 
-        onBackPressedDispatcher.addCallback(this) {
-            // Prevent back navigation to maintain security
-        }
+        onBackPressedDispatcher.addCallback(
+            this,
+            object: androidx.activity.OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    // Prevent back navigation to maintain security
+                    Log.d(TAG, "Back pressed ignored on AppLock overlay")
+                }
+            })
 
         setupWindow()
         loadAppNameAndSetupUI()
@@ -256,7 +259,6 @@ class PasswordOverlayActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
-        movedToBackground = false
         AppLockManager.isLockScreenShown.set(true) // Set to true when activity is visible
         lifecycleScope.launch {
             applyUserPreferences()
@@ -290,10 +292,9 @@ class PasswordOverlayActivity : FragmentActivity() {
 
     override fun onPause() {
         super.onPause()
-        if (!isChangingConfigurations() && !isBiometricPromptShowingLocal && !movedToBackground) {
+        if (!isChangingConfigurations() && !isBiometricPromptShowingLocal) {
+            Log.d(TAG, "Overlay paused; lock screen hidden but app remains locked")
             AppLockManager.isLockScreenShown.set(false)
-            AppLockManager.reportBiometricAuthFinished()
-            finish()
         }
     }
 
@@ -304,10 +305,12 @@ class PasswordOverlayActivity : FragmentActivity() {
 
     override fun onStop() {
         super.onStop()
-        movedToBackground = true
+        if (isChangingConfigurations()) {
+            return
+        }
+        Log.d(TAG, "Overlay stopped; finishing lock overlay")
         AppLockManager.isLockScreenShown.set(false)
-        if (!isChangingConfigurations() && !isFinishing && !isDestroyed) {
-            AppLockManager.reportBiometricAuthFinished()
+        if (!isFinishing && !isDestroyed) {
             finish()
         }
     }
@@ -495,9 +498,7 @@ fun PasswordOverlayScreen(
         }
     }
 
-    if (fromMainActivity) {
-        BackHandler {}
-    }
+    BackHandler {}
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalAnimationApi::class)
