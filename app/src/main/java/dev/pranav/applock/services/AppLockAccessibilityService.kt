@@ -354,6 +354,10 @@ class AppLockAccessibilityService : AccessibilityService() {
                 onUnlock = {
                     AppLockManager.isLockScreenShown.set(false)
                     AppLockManager.unlockApp(packageName)
+                },
+                onExit = {
+                    performGlobalAction(GLOBAL_ACTION_HOME)
+                    AppLockManager.isLockScreenShown.set(false)
                 }
             )
         }

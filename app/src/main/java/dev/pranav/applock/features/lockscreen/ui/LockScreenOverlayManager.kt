@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.PixelFormat
 import android.view.KeyEvent
 import android.view.WindowManager
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.*
 import androidx.savedstate.SavedStateRegistry
@@ -36,7 +37,8 @@ class LockScreenOverlayManager(private val context: Context):
     fun showOverlay(
         lockedPackageName: String,
         triggeringPackageName: String,
-        onUnlock: () -> Unit
+        onUnlock: () -> Unit,
+        onExit: () -> Unit
     ) {
         if (composeView != null) return
 
@@ -78,6 +80,11 @@ class LockScreenOverlayManager(private val context: Context):
                             removeOverlay()
                         }
                         isValid
+                    }
+
+                    BackHandler {
+                        onExit()
+                        removeOverlay()
                     }
 
                     val lockType = appLockRepository.getLockType()
