@@ -3,8 +3,8 @@ package dev.pranav.applock.data.manager
 import android.util.Log
 import dev.pranav.applock.data.repository.BackendImplementation
 import dev.pranav.applock.services.AppLockAccessibilityService
-import dev.pranav.applock.services.ExperimentalAppLockService
 import dev.pranav.applock.services.ShizukuAppLockService
+import dev.pranav.applock.services.UsageLockService
 
 /**
  * Manages backend service operations and switching between different implementations.
@@ -24,7 +24,7 @@ class BackendServiceManager {
         chosenBackend: BackendImplementation
     ): Boolean {
         Log.d(TAG, "Checking if service ${serviceClass.simpleName} should start")
-        Log.d(TAG, "Active backend: ${activeBackend?.name}, Chosen backend: ${chosenBackend.name}")
+        Log.d(TAG, "Chosen backend: ${chosenBackend.name}")
 
         val serviceBackend = getBackendForService(serviceClass)
         if (serviceBackend == null) {
@@ -32,15 +32,8 @@ class BackendServiceManager {
             return false
         }
 
-        // Service should start if it matches the chosen backend
         if (serviceBackend == chosenBackend) {
             Log.d(TAG, "Service ${serviceClass.simpleName} matches chosen backend")
-            return true
-        }
-
-        // Service should start if it matches the active backend (fallback scenario)
-        if (activeBackend != null && serviceBackend == activeBackend) {
-            Log.d(TAG, "Service ${serviceClass.simpleName} matches active backend")
             return true
         }
 
@@ -51,7 +44,7 @@ class BackendServiceManager {
     private fun getBackendForService(serviceClass: Class<*>): BackendImplementation? {
         return when (serviceClass) {
             AppLockAccessibilityService::class.java -> BackendImplementation.ACCESSIBILITY
-            ExperimentalAppLockService::class.java -> BackendImplementation.USAGE_STATS
+            UsageLockService::class.java -> BackendImplementation.USAGE_STATS
             ShizukuAppLockService::class.java -> BackendImplementation.SHIZUKU
             else -> null
         }

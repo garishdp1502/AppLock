@@ -14,6 +14,7 @@ import android.os.IBinder
 import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import dev.pranav.applock.R
 import dev.pranav.applock.core.broadcast.DeviceAdmin
 import dev.pranav.applock.core.utils.LogUtils
@@ -46,6 +47,7 @@ class ShizukuAppLockService : Service() {
     override fun onCreate() {
         super.onCreate()
         AppLockManager.isLockScreenShown.set(false)
+        startForegroundService()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -55,14 +57,12 @@ class ShizukuAppLockService : Service() {
         isServiceRunning = true
 
         if (!shouldStartService(appLockRepository, this::class.java) || !isShizukuAvailable()) {
-            Log.e(TAG, "Service not needed or Shizuku not ready. Triggering fallback if necessary.")
+            Log.e(TAG, "Service not needed or Shizuku not ready. Stopping service.")
             isServiceRunning = false
-            AppLockManager.startFallbackServices(this, ShizukuAppLockService::class.java)
             stopSelf()
             return START_NOT_STICKY
         }
 
-        AppLockManager.resetRestartAttempts(TAG)
         appLockRepository.setActiveBackend(BackendImplementation.SHIZUKU)
         AppLockManager.stopAllOtherServices(this, this::class.java)
 
@@ -70,14 +70,11 @@ class ShizukuAppLockService : Service() {
 
         val shizukuStarted = shizukuActivityManager?.start() == true
         if (!shizukuStarted) {
-            Log.e(TAG, "Shizuku failed to start, triggering fallback")
+            Log.e(TAG, "Shizuku failed to start. Stopping service.")
             isServiceRunning = false
-            AppLockManager.startFallbackServices(this, ShizukuAppLockService::class.java)
             stopSelf()
             return START_NOT_STICKY
         }
-
-        startForegroundService()
 
         return START_STICKY
     }
@@ -87,9 +84,8 @@ class ShizukuAppLockService : Service() {
 
         shizukuActivityManager?.stop()
 
-        if (isServiceRunning && shouldStartService(appLockRepository, this::class.java)) {
-            LogUtils.d(TAG, "Service destroyed unexpectedly, starting fallback")
-            AppLockManager.startFallbackServices(this, ShizukuAppLockService::class.java)
+        if (isServiceRunning) {
+            LogUtils.d(TAG, "Service destroyed unexpectedly. Automatic fallback is disabled.")
         }
 
         isServiceRunning = false
@@ -97,13 +93,27 @@ class ShizukuAppLockService : Service() {
         super.onDestroy()
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        if (shouldStartService(appLockRepository, this::class.java)) {
+            try {
+                val startIntent = Intent(this, ShizukuAppLockService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    ContextCompat.startForegroundService(this, startIntent)
+                } else {
+                    startService(startIntent)
+                }
+                LogUtils.d(TAG, "Re-started ShizukuAppLockService after task removal")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to restart service after task removal", e)
+            }
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onUnbind(intent: Intent?): Boolean {
-        LogUtils.d(TAG, "ShizukuAppLockService unbound. Checking for necessary restart.")
-        if (shouldStartService(appLockRepository, this::class.java)) {
-            AppLockManager.startFallbackServices(this, ShizukuAppLockService::class.java)
-        }
+        LogUtils.d(TAG, "ShizukuAppLockService unbound. Automatic fallback is disabled.")
         return super.onUnbind(intent)
     }
 

@@ -6,7 +6,6 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
-import androidx.activity.addCallback
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -27,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -58,7 +58,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.util.concurrent.Executor
 
-class PasswordOverlayActivity : FragmentActivity() {
+class PasswordOverlayActivity: FragmentActivity() {
     private lateinit var executor: Executor
     private lateinit var biometricPrompt: BiometricPrompt
     private lateinit var promptInfo: BiometricPrompt.PromptInfo
@@ -67,7 +67,6 @@ class PasswordOverlayActivity : FragmentActivity() {
     internal var triggeringPackageNameFromIntent: String? = null
 
     private var isBiometricPromptShowingLocal = false
-    private var movedToBackground = false
     private var appName: String = ""
 
     private val TAG = "PasswordOverlayActivity"
@@ -87,9 +86,14 @@ class PasswordOverlayActivity : FragmentActivity() {
 
         appLockRepository = AppLockRepository(applicationContext)
 
-        onBackPressedDispatcher.addCallback(this) {
-            // Prevent back navigation to maintain security
-        }
+        onBackPressedDispatcher.addCallback(
+            this,
+            object: androidx.activity.OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    // Prevent back navigation to maintain security
+                    Log.d(TAG, "Back pressed ignored on AppLock overlay")
+                }
+            })
 
         setupWindow()
         loadAppNameAndSetupUI()
@@ -118,11 +122,13 @@ class PasswordOverlayActivity : FragmentActivity() {
             WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
                     WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
                     WindowManager.LayoutParams.FLAG_ALLOW_LOCK_WHILE_SCREEN_ON or
-                    WindowManager.LayoutParams.FLAG_SECURE
+                    WindowManager.LayoutParams.FLAG_SECURE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            setShowWhenLocked(true)
+            //setShowWhenLocked(true)
             setTurnScreenOn(true)
         }
 
@@ -133,6 +139,8 @@ class PasswordOverlayActivity : FragmentActivity() {
 
         val layoutParams = window.attributes
         layoutParams.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        layoutParams.width = WindowManager.LayoutParams.MATCH_PARENT
+        layoutParams.height = WindowManager.LayoutParams.MATCH_PARENT
 
         if (appLockRepository.shouldUseMaxBrightness()) {
             layoutParams.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL
@@ -206,8 +214,12 @@ class PasswordOverlayActivity : FragmentActivity() {
                                 onAuthSuccess = {},
                                 lockedAppName = appName,
                                 triggeringPackageName = triggeringPackageNameFromIntent,
-                                onPinAttempt = onPinAttemptCallback
+                                onPinAttempt = onPinAttemptCallback,
+                                showCloseButton = true,
+                                onClose = { finish() }
                             )
+
+                            BackHandler { }
                         }
                     }
                 }
@@ -234,7 +246,7 @@ class PasswordOverlayActivity : FragmentActivity() {
     }
 
     private val authenticationCallbackInternal =
-        object : BiometricPrompt.AuthenticationCallback() {
+        object: BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                 super.onAuthenticationError(errorCode, errString)
                 isBiometricPromptShowingLocal = false
@@ -256,7 +268,6 @@ class PasswordOverlayActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
-        movedToBackground = false
         AppLockManager.isLockScreenShown.set(true) // Set to true when activity is visible
         lifecycleScope.launch {
             applyUserPreferences()
@@ -290,10 +301,9 @@ class PasswordOverlayActivity : FragmentActivity() {
 
     override fun onPause() {
         super.onPause()
-        if (!isChangingConfigurations() && !isBiometricPromptShowingLocal && !movedToBackground) {
+        if (!isChangingConfigurations && !isBiometricPromptShowingLocal) {
+            Log.d(TAG, "Overlay paused; lock screen hidden but app remains locked")
             AppLockManager.isLockScreenShown.set(false)
-            AppLockManager.reportBiometricAuthFinished()
-            finish()
         }
     }
 
@@ -304,10 +314,12 @@ class PasswordOverlayActivity : FragmentActivity() {
 
     override fun onStop() {
         super.onStop()
-        movedToBackground = true
+        if (isChangingConfigurations) {
+            return
+        }
+        Log.d(TAG, "Overlay stopped; finishing lock overlay")
         AppLockManager.isLockScreenShown.set(false)
-        if (!isChangingConfigurations() && !isFinishing && !isDestroyed) {
-            AppLockManager.reportBiometricAuthFinished()
+        if (!isFinishing && !isDestroyed) {
             finish()
         }
     }
@@ -327,6 +339,8 @@ fun PasswordOverlayScreen(
     modifier: Modifier = Modifier,
     showBiometricButton: Boolean = false,
     fromMainActivity: Boolean = false,
+    showCloseButton: Boolean = false,
+    onClose: () -> Unit = {},
     onBiometricAuth: () -> Unit = {},
     onAuthSuccess: () -> Unit,
     lockedAppName: String? = null,
@@ -347,36 +361,125 @@ fun PasswordOverlayScreen(
         modifier = modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.surfaceContainer
     ) {
-        val passwordState = remember { mutableStateOf("") }
-        var showError by remember { mutableStateOf(false) }
-        val minLength = 4
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (showCloseButton) {
+                IconButton(
+                    onClick = onClose,
+                    modifier = Modifier
+                        .statusBarsPadding()
+                        .padding(start = 8.dp, top = 8.dp)
+                        .align(Alignment.TopStart)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
 
-        if (isLandscape) {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            val passwordState = remember { mutableStateOf("") }
+            var showError by remember { mutableStateOf(false) }
+            val minLength = 4
+
+            if (isLandscape) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = if (!fromMainActivity && !lockedAppName.isNullOrEmpty())
+                                "Continue to $lockedAppName"
+                            else
+                                stringResource(R.string.enter_password_to_continue),
+                            style = MaterialTheme.typography.titleLarge,
+                            textAlign = TextAlign.Center
+                        )
+
+//                        if (!fromMainActivity && !triggeringPackageName.isNullOrEmpty()) {
+//                            Spacer(modifier = Modifier.height(8.dp))
+//                            Text(
+//                                text = triggeringPackageName,
+//                                style = MaterialTheme.typography.labelSmall,
+//                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+//                                textAlign = TextAlign.Center
+//                            )
+//                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        PasswordIndicators(
+                            passwordLength = passwordState.value.length,
+                        )
+
+                        if (showError) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = stringResource(R.string.incorrect_pin_try_again),
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    }
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        KeypadSection(
+                            passwordState = passwordState,
+                            minLength = minLength,
+                            showBiometricButton = showBiometricButton,
+                            fromMainActivity = fromMainActivity,
+                            onBiometricAuth = onBiometricAuth,
+                            onAuthSuccess = onAuthSuccess,
+                            onPinAttempt = onPinAttempt,
+                            onPasswordChange = {
+                                showError = false
+
+                                if (appLockRepository.isAutoUnlockEnabled()) {
+                                    onPinAttempt?.invoke(passwordState.value)
+                                }
+                            },
+                            onPinIncorrect = { showError = true }
+                        )
+                    }
+                }
+            } else {
                 Column(
                     modifier = Modifier
-                        .weight(1f)
-                        .padding(end = 32.dp),
+                        .fillMaxSize()
+                        .padding(vertical = if (fromMainActivity) 24.dp else 12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                    verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
+                    // Dynamic spacer for small screens
+                    val topSpacerHeight = if (screenHeightDp < 600.dp) 12.dp else 48.dp
+                    Spacer(modifier = Modifier.height(topSpacerHeight))
+
                     Text(
                         text = if (!fromMainActivity && !lockedAppName.isNullOrEmpty())
                             "Continue to $lockedAppName"
                         else
                             stringResource(R.string.enter_password_to_continue),
-                        style = MaterialTheme.typography.titleLarge,
+                        style = if (!fromMainActivity && !lockedAppName.isNullOrEmpty())
+                            MaterialTheme.typography.titleLargeEmphasized
+                        else
+                            MaterialTheme.typography.headlineMediumEmphasized,
                         textAlign = TextAlign.Center
                     )
 
 //                    if (!fromMainActivity && !triggeringPackageName.isNullOrEmpty()) {
-//                        Spacer(modifier = Modifier.height(8.dp))
 //                        Text(
 //                            text = triggeringPackageName,
 //                            style = MaterialTheme.typography.labelSmall,
@@ -392,19 +495,16 @@ fun PasswordOverlayScreen(
                     )
 
                     if (showError) {
-                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = stringResource(R.string.incorrect_pin_try_again),
                             color = MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 8.dp)
                         )
                     }
-                }
 
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
+                    Spacer(modifier = Modifier.weight(1f))
+
                     KeypadSection(
                         passwordState = passwordState,
                         minLength = minLength,
@@ -424,79 +524,7 @@ fun PasswordOverlayScreen(
                     )
                 }
             }
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(vertical = if (fromMainActivity) 24.dp else 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(24.dp)
-            ) {
-                // Dynamic spacer for small screens
-                val topSpacerHeight = if (screenHeightDp < 600.dp) 12.dp else 48.dp
-                Spacer(modifier = Modifier.height(topSpacerHeight))
-
-                Text(
-                    text = if (!fromMainActivity && !lockedAppName.isNullOrEmpty())
-                        "Continue to $lockedAppName"
-                    else
-                        stringResource(R.string.enter_password_to_continue),
-                    style = if (!fromMainActivity && !lockedAppName.isNullOrEmpty())
-                        MaterialTheme.typography.titleLargeEmphasized
-                    else
-                        MaterialTheme.typography.headlineMediumEmphasized,
-                    textAlign = TextAlign.Center
-                )
-
-//                if (!fromMainActivity && !triggeringPackageName.isNullOrEmpty()) {
-//                    Text(
-//                        text = triggeringPackageName,
-//                        style = MaterialTheme.typography.labelSmall,
-//                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-//                        textAlign = TextAlign.Center
-//                    )
-//                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                PasswordIndicators(
-                    passwordLength = passwordState.value.length,
-                )
-
-                if (showError) {
-                    Text(
-                        text = stringResource(R.string.incorrect_pin_try_again),
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                KeypadSection(
-                    passwordState = passwordState,
-                    minLength = minLength,
-                    showBiometricButton = showBiometricButton,
-                    fromMainActivity = fromMainActivity,
-                    onBiometricAuth = onBiometricAuth,
-                    onAuthSuccess = onAuthSuccess,
-                    onPinAttempt = onPinAttempt,
-                    onPasswordChange = {
-                        showError = false
-
-                        if (appLockRepository.isAutoUnlockEnabled()) {
-                            onPinAttempt?.invoke(passwordState.value)
-                        }
-                    },
-                    onPinIncorrect = { showError = true }
-                )
-            }
         }
-    }
-
-    if (fromMainActivity) {
-        BackHandler {}
     }
 }
 
@@ -511,6 +539,8 @@ fun PasswordIndicators(
     val screenWidth = windowInfo.containerSize.width
     val screenHeight = windowInfo.containerSize.height
     val screenWidthDp = configuration.screenWidthDp.dp
+    val screenHeightDp = configuration.screenHeightDp.dp
+
     val isLandscape = screenWidth > screenHeight
 
     val indicatorSize = remember(screenWidthDp) {
@@ -556,7 +586,7 @@ fun PasswordIndicators(
     ) {
         LazyRow(
             state = lazyListState,
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(
                 indicatorSpacing,
                 Alignment.CenterHorizontally

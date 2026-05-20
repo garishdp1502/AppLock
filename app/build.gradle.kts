@@ -8,18 +8,14 @@ plugins {
 
 android {
     namespace = "dev.pranav.applock"
-    compileSdk = 36
-
-    // Builds with Canary Preview won't work on non-Canary devices
-    // compileSdkPreview = "CANARY"
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "dev.pranav.applock"
         minSdk = 26
-        targetSdk = 36
-        // targetSdkPreview = "CANARY"
-        versionCode = 223
-        versionName = "2.2.3"
+        targetSdk = 37
+        versionCode = 243
+        versionName = "2.4.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -28,6 +24,9 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+
+            vcsInfo.include = false
+
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -51,11 +50,6 @@ android {
         includeInApk = false
         includeInBundle = false
     }
-    buildToolsVersion = "37.0.0 rc1"
-    compileSdkMinor = 1
-    kotlin.compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_17)
-    }
 }
 
 dependencies {
@@ -63,7 +57,6 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
-    // fixes "Can only use lower 16 bits for requestCode"
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.fragment.ktx)
     implementation(platform(libs.androidx.compose.bom))

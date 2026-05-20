@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "dev.pranav.appintro"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 26
@@ -35,8 +35,6 @@ android {
     buildFeatures {
         compose = true
     }
-    compileSdkMinor = 1
-    buildToolsVersion = "37.0.0 rc1"
 }
 
 dependencies {

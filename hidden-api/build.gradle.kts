@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "dev.pranav.hidden_api"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 26
@@ -28,8 +28,7 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    compileSdkMinor = 1
-    buildToolsVersion = "37.0.0 rc1"
+
     kotlin.compilerOptions {
         jvmTarget.set(JvmTarget.JVM_11)
     }

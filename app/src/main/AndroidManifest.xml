@@ -58,6 +58,8 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:excludeFromRecents="true"
             android:exported="false"
+            android:launchMode="singleInstance"
+            android:noHistory="true"
             android:taskAffinity=""
             android:theme="@android:style/Theme.Material.NoActionBar.TranslucentDecor" />
 
@@ -73,7 +75,7 @@
             android:foregroundServiceType="specialUse|systemExempted" />
 
         <service
-            android:name=".services.ExperimentalAppLockService"
+            android:name=".services.UsageLockService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="specialUse|systemExempted">
@@ -115,6 +117,7 @@
 
         <receiver
             android:name=".core.broadcast.BootReceiver"
+            android:directBootAware="true"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
@@ -124,7 +127,12 @@
             <intent-filter>
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.USER_UNLOCKED" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+            </intent-filter>
         </receiver>
+
 
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -140,7 +141,9 @@ fun MainScreen(
 
     var showDonateDialog by remember { mutableStateOf(appLockRepository.isShowDonateLink()) }
     if (showDonateDialog && !showCommunityLink) {
-        DonateModalBottomSheet { showDonateDialog = false }
+        DonateModalBottomSheet {
+            appLockRepository.setShowDonateLink(false); showDonateDialog = false
+        }
     }
 
     Scaffold(
@@ -721,6 +724,7 @@ private fun CommunityDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
         icon = {
             Icon(
                 Icons.Rounded.Groups,
@@ -736,10 +740,12 @@ private fun CommunityDialog(
             )
         },
         text = {
-            Text(
-                text = stringResource(R.string.join_community_desc),
-                style = MaterialTheme.typography.bodyMedium
-            )
+            Column(Modifier.fillMaxWidth(0.7f)) {
+                Text(
+                    text = stringResource(R.string.join_community_desc),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
         },
         confirmButton = {
             Button(onClick = onJoin) {
