@@ -6,6 +6,7 @@
 
     <string name="unlock_to_disable_admin">Enter your password to disable admin permission.</string>
     <string name="incorrect_pin_try_again">Incorrect PIN. Please try again.</string>
+    <string name="incorrect_pass_try_again">Incorrect password. Please try again.</string>
     <string name="password_verified_admin">Password verified, you can now disable admin permission</string>
     <string name="choose_app_detection">Choose App Detection Method</string>
     <string name="app_detection_desc">Select how you want AppLock to detect when protected apps are launched.</string>
@@ -90,6 +91,19 @@ Make sure you have Shizuku installed and enabled via ADB. Tap \'Next\' to grant 
     <string name="start_over_button">Start Over</string>
     <string name="password_set_successfully_toast">Password set successfully</string>
     <string name="use_pattern_button">Use Pattern</string>
+    <string name="use_password_button">Use Password</string>
+    <string name="use_pin_instead">Use PIN</string>
+
+    <!-- Alphanumeric Password Strings -->
+    <string name="set_alphanumeric_password_title">Set Password</string>
+    <string name="create_alphanumeric_password_label">Create a password</string>
+    <string name="confirm_alphanumeric_password_label">Confirm your password</string>
+    <string name="enter_current_password_label">Enter current password</string>
+    <string name="password_hint">Enter password</string>
+    <string name="password_too_short_error">Password must be at least 4 characters</string>
+    <string name="password_too_long_error">Password must be at most 64 characters</string>
+    <string name="passwords_dont_match_error">Passwords don\'t match</string>
+    <string name="incorrect_password_try_again">Incorrect password. Please try again.</string>
 
     <!-- MainScreen -->
     <string name="main_screen_anti_uninstall_log">Anti-uninstall is enabled</string>

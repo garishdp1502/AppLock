@@ -267,8 +267,13 @@ fun PatternSetPasswordScreen(
                     }
 
                     if (isFirstTimeSetup && !isVerifyOldPasswordMode && !isConfirmationMode) {
-                        TextButton(onClick = { switchToPinMethod() }) {
-                            Text("Use PIN Instead")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { switchToPinMethod() }) {
+                                Text(stringResource(R.string.use_pin_instead))
+                            }
+                            TextButton(onClick = { navController.navigate(Screen.SetPasswordAlphanumeric.route) }) {
+                                Text(stringResource(R.string.use_password_button))
+                            }
                         }
                     }
 
@@ -448,8 +453,13 @@ fun PatternSetPasswordScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     if (!isVerifyOldPasswordMode && !isConfirmationMode) {
-                        TextButton(onClick = { switchToPinMethod() }) {
-                            Text("Use PIN Instead")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { switchToPinMethod() }) {
+                                Text(stringResource(R.string.use_pin_instead))
+                            }
+                            TextButton(onClick = { navController.navigate(Screen.SetPasswordAlphanumeric.route) }) {
+                                Text(stringResource(R.string.use_password_button))
+                            }
                         }
                     }
 

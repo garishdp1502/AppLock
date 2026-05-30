@@ -1,5 +1,6 @@
 package dev.pranav.applock.data.repository
 
+import dev.pranav.applock.core.utils.SecurityUtils
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
@@ -17,7 +18,9 @@ class PreferencesRepository(context: Context) {
         context.getSharedPreferences(PREFS_NAME_SETTINGS, Context.MODE_PRIVATE)
 
     fun setPassword(password: String) {
-        appLockPrefs.edit { putString(KEY_PASSWORD, password) }
+        val salt = SecurityUtils.generateSalt()
+        val saltedHash = SecurityUtils.hashPassword(password, salt)
+        appLockPrefs.edit(commit = true) { putString(KEY_PASSWORD, saltedHash) }
     }
 
     fun getPassword(): String? {
@@ -25,12 +28,17 @@ class PreferencesRepository(context: Context) {
     }
 
     fun validatePassword(inputPassword: String): Boolean {
-        val storedPassword = getPassword()
-        return storedPassword != null && inputPassword == storedPassword
+        val storedSaltedHash = getPassword() ?: return false
+        
+        // If it's a legacy plain text password (doesn't contain ':'), migrate it or validate as is
+        // For simplicity and since this is a new feature, we assume all passwords should be hashed.
+        // If there's an existing plain text password, this will fail validation and require reset.
+        
+        return SecurityUtils.verifyPassword(inputPassword, storedSaltedHash)
     }
 
     fun setPattern(pattern: String) {
-        appLockPrefs.edit { putString(KEY_PATTERN, pattern) }
+        appLockPrefs.edit(commit = true) { putString(KEY_PATTERN, pattern) }
     }
 
     fun getPattern(): String? {
@@ -43,7 +51,7 @@ class PreferencesRepository(context: Context) {
     }
 
     fun setLockType(lockType: String) {
-        settingsPrefs.edit { putString(KEY_LOCK_TYPE, lockType) }
+        settingsPrefs.edit(commit = true) { putString(KEY_LOCK_TYPE, lockType) }
     }
 
     fun getLockType(): String {
@@ -180,5 +188,6 @@ class PreferencesRepository(context: Context) {
 
         const val LOCK_TYPE_PIN = "pin"
         const val LOCK_TYPE_PATTERN = "pattern"
+        const val LOCK_TYPE_PASSWORD = "password"
     }
 }

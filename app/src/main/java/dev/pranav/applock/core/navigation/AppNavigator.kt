@@ -20,8 +20,10 @@ import dev.pranav.applock.data.repository.PreferencesRepository
 import dev.pranav.applock.features.antiuninstall.ui.AntiUninstallScreen
 import dev.pranav.applock.features.appintro.ui.AppIntroScreen
 import dev.pranav.applock.features.applist.ui.MainScreen
-import dev.pranav.applock.features.lockscreen.ui.PasswordOverlayScreen
+import dev.pranav.applock.features.lockscreen.ui.AlphanumericPasswordOverlayScreen
+import dev.pranav.applock.features.lockscreen.ui.PinPasswordOverlayScreen
 import dev.pranav.applock.features.lockscreen.ui.PatternLockScreen
+import dev.pranav.applock.features.setpassword.ui.AlphanumericSetPasswordScreen
 import dev.pranav.applock.features.setpassword.ui.PatternSetPasswordScreen
 import dev.pranav.applock.features.setpassword.ui.SetPasswordScreen
 import dev.pranav.applock.features.settings.ui.SettingsScreen
@@ -52,15 +54,25 @@ fun AppNavHost(navController: NavHostController, startDestination: String) {
         }
 
         composable(Screen.ChangePassword.route) {
-            if (application.appLockRepository.getLockType() == PreferencesRepository.LOCK_TYPE_PATTERN) {
-                PatternSetPasswordScreen(navController, false)
-            } else {
-                SetPasswordScreen(navController, isFirstTimeSetup = false)
+            when (application.appLockRepository.getLockType()) {
+                PreferencesRepository.LOCK_TYPE_PATTERN -> {
+                    PatternSetPasswordScreen(navController, false)
+                }
+                PreferencesRepository.LOCK_TYPE_PASSWORD -> {
+                    AlphanumericSetPasswordScreen(navController, false)
+                }
+                else -> {
+                    SetPasswordScreen(navController, isFirstTimeSetup = false)
+                }
             }
         }
 
         composable(Screen.SetPasswordPattern.route) {
             PatternSetPasswordScreen(navController, isFirstTimeSetup = true)
+        }
+
+        composable(Screen.SetPasswordAlphanumeric.route) {
+            AlphanumericSetPasswordScreen(navController, isFirstTimeSetup = true)
         }
 
         composable(Screen.Main.route) {
@@ -88,8 +100,21 @@ fun AppNavHost(navController: NavHostController, startDestination: String) {
                     )
                 }
 
+                PreferencesRepository.LOCK_TYPE_PASSWORD -> {
+                    AlphanumericPasswordOverlayScreen(
+                        showBiometricButton = application.appLockRepository.isBiometricAuthEnabled(),
+                        fromMainActivity = true,
+                        onBiometricAuth = {
+                            handleBiometricAuthentication(context, navController)
+                        },
+                        onAuthSuccess = {
+                            handleAuthenticationSuccess(navController)
+                        }
+                    )
+                }
+
                 else -> {
-                    PasswordOverlayScreen(
+                    PinPasswordOverlayScreen(
                         showBiometricButton = application.appLockRepository.isBiometricAuthEnabled(),
                         fromMainActivity = true,
                         onBiometricAuth = {

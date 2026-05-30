@@ -1,5 +1,6 @@
 package dev.pranav.applock.features.lockscreen.ui
 
+import dev.pranav.applock.features.lockscreen.ui.AlphanumericPasswordOverlayScreen
 import android.content.Context
 import android.content.res.Configuration
 import android.os.Build
@@ -84,7 +85,7 @@ class PasswordOverlayActivity: FragmentActivity() {
 
         enableEdgeToEdge()
 
-        appLockRepository = AppLockRepository(applicationContext)
+        appLockRepository = applicationContext.appLockRepository()
 
         onBackPressedDispatcher.addCallback(
             this,
@@ -193,7 +194,7 @@ class PasswordOverlayActivity: FragmentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     contentColor = MaterialTheme.colorScheme.primaryContainer
                 ) { innerPadding ->
-                    val lockType = remember { appLockRepository.getLockType() }
+                    val lockType = appLockRepository.getLockType()
                     when (lockType) {
                         PreferencesRepository.LOCK_TYPE_PATTERN -> {
                             PatternLockScreen(
@@ -205,8 +206,23 @@ class PasswordOverlayActivity: FragmentActivity() {
                             )
                         }
 
+                        PreferencesRepository.LOCK_TYPE_PASSWORD -> {
+                            AlphanumericPasswordOverlayScreen(
+                                modifier = Modifier.padding(innerPadding),
+                                showBiometricButton = appLockRepository.isBiometricAuthEnabled(),
+                                fromMainActivity = false,
+                                onBiometricAuth = { triggerBiometricPrompt() },
+                                onAuthSuccess = {},
+                                lockedAppName = appName,
+                                triggeringPackageName = triggeringPackageNameFromIntent,
+                                onPasswordAttempt = onPinAttemptCallback,
+                                showCloseButton = true,
+                                onClose = { finish() }
+                            )
+                        }
+
                         else -> {
-                            PasswordOverlayScreen(
+                            PinPasswordOverlayScreen(
                                 modifier = Modifier.padding(innerPadding),
                                 showBiometricButton = appLockRepository.isBiometricAuthEnabled(),
                                 fromMainActivity = false,
@@ -335,7 +351,7 @@ class PasswordOverlayActivity: FragmentActivity() {
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalAnimationApi::class)
 @Composable
-fun PasswordOverlayScreen(
+fun PinPasswordOverlayScreen(
     modifier: Modifier = Modifier,
     showBiometricButton: Boolean = false,
     fromMainActivity: Boolean = false,
