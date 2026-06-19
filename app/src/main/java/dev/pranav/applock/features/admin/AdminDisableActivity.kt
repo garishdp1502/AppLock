@@ -7,26 +7,27 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.pranav.applock.R
 import dev.pranav.applock.core.broadcast.DeviceAdmin
+import dev.pranav.applock.core.utils.SecurityUtils
 import dev.pranav.applock.core.utils.appLockRepository
 import dev.pranav.applock.data.repository.AppLockRepository
 import dev.pranav.applock.data.repository.PreferencesRepository
@@ -95,6 +96,44 @@ class AdminDisableActivity : ComponentActivity() {
                                         false
                                     )
                                     finish()
+                                }
+                            )
+                        }
+
+                        PreferencesRepository.LOCK_TYPE_PASSWORD -> {
+                            AdminDisablePasswordScreen(
+                                modifier = Modifier.padding(padding),
+                                onPasswordVerified = {
+                                    val deviceAdmin = DeviceAdmin()
+                                    deviceAdmin.setPasswordVerified(this@AdminDisableActivity, true)
+
+                                    Toast.makeText(
+                                        this@AdminDisableActivity,
+                                        R.string.password_verified_admin,
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    appLockRepository.setAntiUninstallEnabled(false)
+                                    finish()
+                                },
+                                onCancel = {
+                                    val deviceAdmin = DeviceAdmin()
+                                    deviceAdmin.setPasswordVerified(
+                                        this@AdminDisableActivity,
+                                        false
+                                    )
+                                    finish()
+                                },
+                                validatePassword = { inputPassword ->
+                                    appLockRepository.validatePassword(inputPassword)
+                                        .also { isValid ->
+                                            if (!isValid) {
+                                                Toast.makeText(
+                                                    this@AdminDisableActivity,
+                                                    R.string.incorrect_password_try_again,
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                        }
                                 }
                             )
                         }
@@ -213,6 +252,107 @@ fun AdminDisableScreen(
 }
 
 @Composable
+fun AdminDisablePasswordScreen(
+    modifier: Modifier = Modifier,
+    onPasswordVerified: () -> Unit,
+    onCancel: () -> Unit,
+    validatePassword: (String) -> Boolean
+) {
+    Surface(
+        modifier = modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        var passwordState by remember { mutableStateOf("") }
+        var showError by remember { mutableStateOf(false) }
+        var passwordVisible by remember { mutableStateOf(false) }
+        val focusRequester = remember { FocusRequester() }
+
+        LaunchedEffect(Unit) {
+            focusRequester.requestFocus()
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = stringResource(R.string.unlock_to_disable_admin),
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            OutlinedTextField(
+                value = passwordState,
+                onValueChange = { input ->
+                    passwordState = SecurityUtils.sanitizePassword(input)
+                    showError = false
+                },
+                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+                label = { Text(stringResource(R.string.password_hint)) },
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Password,
+                    imeAction = ImeAction.Done
+                ),
+                trailingIcon = {
+                    val image = if (passwordVisible)
+                        Icons.Filled.Visibility
+                    else Icons.Filled.VisibilityOff
+
+                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                        Icon(imageVector = image, contentDescription = null)
+                    }
+                },
+                isError = showError,
+                singleLine = true
+            )
+
+            if (showError) {
+                Text(
+                    text = stringResource(R.string.incorrect_password_try_again),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(top = 4.dp).align(Alignment.Start)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                TextButton(
+                    onClick = onCancel,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(stringResource(R.string.cancel_button))
+                }
+
+                Button(
+                    onClick = {
+                        if (validatePassword(passwordState)) {
+                            onPasswordVerified()
+                        } else {
+                            showError = true
+                            passwordState = ""
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(stringResource(R.string.verify_button))
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun AdminDisablePatternScreen(
     modifier: Modifier = Modifier,
     onPatternVerified: () -> Unit,
@@ -253,6 +393,15 @@ fun AdminDisablePatternScreen(
                     isValid
                 }
             )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            TextButton(
+                onClick = onCancel,
+                modifier = Modifier.padding(bottom = 16.dp)
+            ) {
+                Text(stringResource(R.string.cancel_button))
+            }
         }
     }
 }

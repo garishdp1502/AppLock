@@ -527,15 +527,29 @@ fun SetPasswordScreen(
                     }
                 }
 
-                TextButton(
-                    onClick = {
-                        navController.navigate(Screen.SetPasswordPattern.route)
-                    },
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.padding(bottom = 16.dp)
                 ) {
-                    Text(
-                        stringResource(R.string.use_pattern_button)
-                    )
+                    TextButton(
+                        onClick = {
+                            navController.navigate(Screen.SetPasswordPattern.route)
+                        }
+                    ) {
+                        Text(
+                            stringResource(R.string.use_pattern_button)
+                        )
+                    }
+
+                    TextButton(
+                        onClick = {
+                            navController.navigate(Screen.SetPasswordAlphanumeric.route)
+                        }
+                    ) {
+                        Text(
+                            stringResource(R.string.use_password_button)
+                        )
+                    }
                 }
 
                 Column(
