@@ -26,10 +26,8 @@ object AppLockConstants {
         "com.android.intentresolver",
         "com.google.android.permissioncontroller",
         "android.uid.system:1000",
-        "com.google.android.googlequicksearchbox",
         "android",
         "com.google.android.gms",
-        "com.google.android.webview"
     )
 
     val ACCESSIBILITY_SETTINGS_CLASSES = setOf(
