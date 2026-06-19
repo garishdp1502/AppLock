@@ -24,7 +24,6 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-
             vcsInfo.include = false
 
             proguardFiles(
@@ -34,6 +33,25 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    flavorDimensions.add("environment")
+
+    productFlavors {
+        create("rc") {
+            applicationIdSuffix = ".debug"
+            buildConfigField("String", "NATIVE_LIB_NAME", "\"CC_dev\"")
+            resValue("string", "app_name", "Dev ANBS Lock")
+            buildConfigField("boolean", "LOGGING", "true")
+            dimension = "environment"
+        }
+        create("prod") {
+            applicationIdSuffix = ".anbs"
+            buildConfigField("String", "NATIVE_LIB_NAME", "\"CC\"")
+            resValue("string", "app_name", "ANBS Lock")
+            dimension = "environment"
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -44,11 +62,47 @@ android {
     buildFeatures {
         compose = true
         aidl = true
+        buildConfig = true
+        resValues = true
     }
 
     dependenciesInfo {
         includeInApk = false
         includeInBundle = false
+    }
+}
+
+// Đổi tên file APK đầu ra cho bản release
+androidComponents {
+    onVariants { variant ->
+        if (variant.buildType == "release") {
+            val flavor = variant.flavorName ?: ""
+            val vName = variant.outputs.firstOrNull()?.versionName?.get() ?: "unknown"
+            val vCode = variant.outputs.firstOrNull()?.versionCode?.get() ?: 0
+            val variantName = variant.name.replaceFirstChar { it.uppercase() }
+
+            val renameTask = tasks.register<Copy>("rename${variantName}Apk") {
+                val apkFolder = variant.artifacts.get(com.android.build.api.artifact.SingleArtifact.APK)
+                from(apkFolder)
+                include("**/*.apk")
+                into(projectDir.resolve("$flavor/release"))
+                eachFile {
+                    if (name.endsWith(".apk")) {
+                        name = "ANBSLock_${flavor}_v${vName}_${vCode}.apk"
+                    }
+                    path = name
+                }
+                includeEmptyDirs = false
+            }
+
+            tasks.matching { it.name == "create${variantName}ApkListingFileRedirect" }.configureEach {
+                dependsOn(renameTask)
+            }
+
+            tasks.matching { it.name == "assemble$variantName" }.configureEach {
+                finalizedBy(renameTask)
+            }
+        }
     }
 }
 
