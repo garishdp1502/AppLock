@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "dev.pranav.appintro"
+    namespace = "com.anbs.appintro"
     compileSdk = 37
 
     defaultConfig {

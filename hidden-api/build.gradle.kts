@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "dev.pranav.hidden_api"
+    namespace = "com.anbs.hidden_api"
     compileSdk = 37
 
     defaultConfig {

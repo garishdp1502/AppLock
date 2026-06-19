@@ -7,11 +7,11 @@ plugins {
 }
 
 android {
-    namespace = "dev.pranav.applock"
+    namespace = "com.anbs.applock"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "dev.pranav.applock"
+        applicationId = "com.anbs.applock"
         minSdk = 26
         targetSdk = 37
         versionCode = 243
@@ -45,7 +45,6 @@ android {
             dimension = "environment"
         }
         create("prod") {
-            applicationIdSuffix = ".anbs"
             buildConfigField("String", "NATIVE_LIB_NAME", "\"CC\"")
             resValue("string", "app_name", "ANBS Lock")
             dimension = "environment"
