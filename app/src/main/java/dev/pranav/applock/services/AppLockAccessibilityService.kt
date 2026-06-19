@@ -241,7 +241,6 @@ class AppLockAccessibilityService : AccessibilityService() {
 
         // Skip excluded packages
         if (packageName == APP_PACKAGE_PREFIX ||
-            packageName in keyboardPackages ||
             packageName in EXCLUDED_APPS
         ) {
             return false
